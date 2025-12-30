@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  tidb:
+    image: pingcap/tidb:latest
+    container_name: tidb-db
+    ports:
+      - "4000:4000"
+    networks:
+      - api-network
+
+  backend:
+    build: ./backend
+    container_name: login-api
+    env_file: .env
+    ports:
+      - "3001:3001"
+    networks:
+      - api-network
+
+  frontend:
+    build: ./frontend
+    container_name: login-ui
+    ports:
+      - "8080:80"
+    networks:
+      - api-network
+
+networks:
+  api-network:
+    driver: bridge

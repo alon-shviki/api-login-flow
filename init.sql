@@ -10,9 +10,6 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- This ensures we remove the old hashed user
 TRUNCATE users;
-
--- Plain text password only
 INSERT INTO users (username, email, password_hash) 
 VALUES ('alon', 'alon@example.com', 'password123');

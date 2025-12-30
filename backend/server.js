@@ -1,11 +1,10 @@
-require('dotenv').config({ path: '../.env' });
+require('dotenv').config();
 const express = require('express');
 const mysql = require('mysql2/promise');
 const crypto = require('crypto');
 const cors = require('cors');
 
 const app = express();
-
 app.use(cors());
 app.use(express.json());
 
@@ -17,45 +16,51 @@ const dbConfig = {
   database: process.env.DB_NAME
 };
 
-//Generates token and saves it in TiDB
+// 1. LOGIN ROUTE (Plain Text)
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
+  console.log(`>>> Login attempt: Email=[${email}] Password=[${password}]`);
+  
   let connection;
-
   try {
     connection = await mysql.createConnection(dbConfig);
+    
+    // Find user by email AND password directly
     const [users] = await connection.execute(
-      'SELECT id FROM users WHERE email = ? AND password_hash = ?', 
+      'SELECT id, email FROM users WHERE email = ? AND password_hash = ?', 
       [email, password]
     );
 
     if (users.length > 0) {
       const token = crypto.randomBytes(16).toString('hex');
       await connection.execute('UPDATE users SET token = ? WHERE id = ?', [token, users[0].id]);
+      
+      console.log("--- SUCCESS: User Found ---");
       res.json({ success: true, token: token });
     } else {
-      res.status(401).json({ success: false, message: "Unauthorized" });
+      console.log("--- FAILED: No match for this Email/Password combination ---");
+      res.status(401).json({ success: false, message: "Invalid credentials" });
     }
   } catch (err) {
+    console.error("!!! DB Error:", err.message);
     res.status(500).json({ success: false, message: err.message });
   } finally {
     if (connection) await connection.end();
   }
 });
 
-//Checks for the token in the HTTP Authorization Header
+// 2. PROFILE ROUTE
 app.get('/api/profile', async (req, res) => {
   const userToken = req.headers['authorization'];
-  
-  if (!userToken) return res.status(403).send("Error: No token in Header");
+  if (!userToken) return res.status(403).send("Error: No token");
 
   let connection;
   try {
     connection = await mysql.createConnection(dbConfig);
     const [users] = await connection.execute('SELECT email FROM users WHERE token = ?', [userToken]);
-
+    
     if (users.length > 0) {
-      res.send(`SUCCESS: Welcome ${users[0].email}. Your token was verified via Header.`);
+      res.send(`SUCCESS: Welcome ${users[0].email}. Verified via Header.`);
     } else {
       res.status(401).send("Error: Invalid Token");
     }
@@ -66,7 +71,6 @@ app.get('/api/profile', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+app.listen(3001, '0.0.0.0', () => {
+    console.log('Backend running on port 3001 (Plain Text Mode)');
 });
