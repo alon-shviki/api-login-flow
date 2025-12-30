@@ -13,22 +13,31 @@ const dbConfig = {
   database: process.env.DB_NAME
 };
 
-// Simple Health Check API
 app.get('/api/health', async (req, res) => {
   try {
     const connection = await mysql.createConnection(dbConfig);
     const [rows] = await connection.execute('SELECT 1 + 1 AS result');
     await connection.end();
-    
-    res.json({ 
-      status: "Success", 
-      message: "Connected to TiDB using .env configuration",
-      data: rows[0].result 
-    });
+    res.json({ status: "Success", message: "Connected to TiDB" });
   } catch (err) {
+    console.error("DB Error:", err.message);
     res.status(500).json({ status: "Error", message: err.message });
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Backend is running on port ${PORT}`));
+
+// This creates the server instance
+const server = app.listen(PORT, () => {
+    console.log("------------------------------------");
+    console.log(`Server running on port: ${PORT}`);
+});
+
+// FORCE STAY ALIVE: Prevents the process from exiting 
+// even if the event loop is empty.
+process.stdin.resume();
+
+// Log if something tries to kill the process
+process.on('SIGINT', () => {
+  process.exit();
+});
