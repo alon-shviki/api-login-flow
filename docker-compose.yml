@@ -4,24 +4,26 @@ services:
     image: pingcap/pd:v7.5.1
     container_name: pd
     networks: [api-network]
-    command: [
-      "--name=pd",
-      "--data-dir=/data",
-      "--client-urls=http://0.0.0.0:2379",
-      "--advertise-client-urls=http://pd:2379"
-    ]
+    command:
+      [
+        "--name=pd",
+        "--data-dir=/data",
+        "--client-urls=http://0.0.0.0:2379",
+        "--advertise-client-urls=http://pd:2379",
+      ]
 
   # --- TiKV Storage Engine ---
   tikv:
     image: pingcap/tikv:v7.5.1
     container_name: tikv
     networks: [api-network]
-    command: [
-      "--pd-endpoints=http://pd:2379",
-      "--addr=0.0.0.0:20160",
-      "--advertise-addr=tikv:20160",
-      "--data-dir=/data"
-    ]
+    command:
+      [
+        "--pd-endpoints=http://pd:2379",
+        "--addr=0.0.0.0:20160",
+        "--advertise-addr=tikv:20160",
+        "--data-dir=/data",
+      ]
     depends_on: [pd]
 
   # --- TiDB SQL Layer ---
@@ -34,16 +36,20 @@ services:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks: [api-network]
     command: ["--store=tikv", "--path=pd:2379"]
-    depends_on: 
+    depends_on:
       - tikv
     healthcheck:
-      test: ["CMD-SHELL", "timeout 1s bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/4000'"]
+      test:
+        [
+          "CMD-SHELL",
+          "timeout 1s bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/4000'",
+        ]
       interval: 10s
       timeout: 10s
       retries: 20
       start_period: 60s
 
-  # --- Kafka Messaging ---
+    # --- Kafka Messaging ---
   kafka:
     image: apache/kafka:latest
     container_name: kafka
@@ -58,13 +64,54 @@ services:
       - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
       - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
       - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_NUM_PARTITIONS=3 
     networks: [api-network]
+
+  # --- TiCDC (Change Data Capture) 
+  ticdc:
+    image: pingcap/ticdc:v7.5.1
+    container_name: ticdc
+    networks: [api-network]
+    command:
+      - /cdc
+      - server
+      - --addr=0.0.0.0:8300
+      - --advertise-addr=ticdc:8300
+      - --pd=http://pd:2379
+      - --log-file=/dev/stdout
+    depends_on:
+      - pd
+      - tidb
+
+  # --- CDC Initializer: Automatically creates the changefeed - FIXED: use /cdc cli ---
+  cdc-init:
+    image: pingcap/ticdc:v7.5.1
+    networks: [api-network]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Waiting for TiCDC to be ready on port 8300..."
+        while ! nc -z ticdc 8300; do sleep 2; done
+        echo "TiCDC ready. Checking/creating changefeed..."
+        if /cdc cli changefeed list --server=http://ticdc:8300 | grep -q "db-changes-changefeed"; then
+          echo "Changefeed 'db-changes-changefeed' already exists."
+        else
+          echo "Creating changefeed to Kafka topic 'db-changes'..."
+          /cdc cli changefeed create \
+            --server=http://ticdc:8300 \
+            --changefeed-id=db-changes-changefeed \
+            --sink-uri="kafka://kafka:9092/db-changes?protocol=canal-json&replication-factor=1"
+          echo "Changefeed created successfully."
+        fi
+        echo "CDC setup complete."
+    depends_on:
+      - ticdc
+      - kafka
 
   # --- Backend API ---
   backend:
     build: ./backend
     container_name: login-api
-    env_file: .env
     ports:
       - "3001:3001"
     depends_on:
@@ -74,12 +121,22 @@ services:
         condition: service_started
     networks: [api-network]
 
-  # --- Kafka Worker ---
+  # --- Login Event Kafka Worker ---
   worker:
     build: ./backend
     container_name: login-worker
     command: node worker.js
     depends_on: [kafka]
+    networks: [api-network]
+
+  # --- CDC Kafka Worker (Database Change Consumer) ---
+  cdc-worker:
+    build: ./backend
+    container_name: cdc-worker
+    command: node cdc-worker.js
+    depends_on:
+      - kafka
+      - cdc-init
     networks: [api-network]
 
   # --- Frontend UI ---
