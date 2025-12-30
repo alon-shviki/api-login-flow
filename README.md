@@ -15,7 +15,7 @@ This project provides a comprehensive user login and profile management system, 
 * Database: MySQL
 * Messaging Queue: Kafka
 * Containerization: Docker
-* Dependencies: `express`, `mysql2`, `kafkajs`, `log4js`, `cors`, `crypto`, `dotenv`, `bcrypt`
+Dependencies: `express`, `mysql2`, `kafkajs`, `log4js`, `cors`, `dotenv`
 * DevDependencies: `docker-compose`
 
 ## 📦 Installation
