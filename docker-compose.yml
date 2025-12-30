@@ -1,49 +1,55 @@
 services:
+  # --- TiDB Placement Driver (Brain) ---
+  pd:
+    image: pingcap/pd:v7.5.1
+    container_name: pd
+    networks: [api-network]
+    command: [
+      "--name=pd",
+      "--data-dir=/data",
+      "--client-urls=http://0.0.0.0:2379",
+      "--advertise-client-urls=http://pd:2379"
+    ]
+
+  # --- TiKV Storage Engine ---
+  tikv:
+    image: pingcap/tikv:v7.5.1
+    container_name: tikv
+    networks: [api-network]
+    command: [
+      "--pd-endpoints=http://pd:2379",
+      "--addr=0.0.0.0:20160",
+      "--advertise-addr=tikv:20160",
+      "--data-dir=/data"
+    ]
+    depends_on: [pd]
+
+  # --- TiDB SQL Layer ---
   tidb:
-    image: pingcap/tidb:latest
+    image: pingcap/tidb:v7.5.1
     container_name: tidb-db
     ports:
       - "4000:4000"
-    networks:
-      - api-network
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks: [api-network]
+    command: ["--store=tikv", "--path=pd:2379"]
+    depends_on: 
+      - tikv
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 1s bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/4000'"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
 
-  backend:
-    build: ./backend
-    container_name: login-api
-    env_file: .env
-    ports:
-      - "3001:3001"
-    depends_on:
-      - tidb
-      - kafka
-    networks:
-      - api-network
-
-  worker:
-    build: ./backend
-    container_name: login-worker
-    command: node worker.js
-    depends_on:
-      - kafka
-    networks:
-      - api-network
-
-  frontend:
-    build: ./frontend
-    container_name: login-ui
-    ports:
-      - "8080:80"
-    networks:
-      - api-network
-
-  # Official Apache Kafka in KRaft mode (No Zookeeper!)
+  # --- Kafka Messaging ---
   kafka:
     image: apache/kafka:latest
     container_name: kafka
     ports:
       - "9092:9092"
     environment:
-      # Kafka Configuration for KRaft
       - KAFKA_NODE_ID=1
       - KAFKA_PROCESS_ROLES=broker,controller
       - KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
@@ -52,11 +58,37 @@ services:
       - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
       - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
       - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
-      - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
-      - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
-      - KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0
-    networks:
-      - api-network
+    networks: [api-network]
+
+  # --- Backend API ---
+  backend:
+    build: ./backend
+    container_name: login-api
+    env_file: .env
+    ports:
+      - "3001:3001"
+    depends_on:
+      tidb:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    networks: [api-network]
+
+  # --- Kafka Worker ---
+  worker:
+    build: ./backend
+    container_name: login-worker
+    command: node worker.js
+    depends_on: [kafka]
+    networks: [api-network]
+
+  # --- Frontend UI ---
+  login-ui:
+    build: ./frontend
+    container_name: login-ui
+    ports:
+      - "8080:80"
+    networks: [api-network]
 
 networks:
   api-network:

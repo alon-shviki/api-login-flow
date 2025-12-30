@@ -3,16 +3,11 @@ USE app_db;
 
 CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    username VARCHAR(255) NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     token VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- This ensures we remove the old hashed user
-TRUNCATE users;
-
--- Plain text password only
-INSERT INTO users (username, email, password_hash) 
-VALUES ('alon', 'alon@example.com', 'password123');
+INSERT IGNORE INTO users (email, password_hash) 
+VALUES ('alon@example.com', 'password123');
