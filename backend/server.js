@@ -27,17 +27,12 @@ app.get('/api/health', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-// This creates the server instance
-const server = app.listen(PORT, () => {
-    console.log("------------------------------------");
+app.listen(PORT, () => {
     console.log(`Server running on port: ${PORT}`);
 });
 
-// FORCE STAY ALIVE: Prevents the process from exiting 
-// even if the event loop is empty.
 process.stdin.resume();
 
-// Log if something tries to kill the process
 process.on('SIGINT', () => {
   process.exit();
 });
