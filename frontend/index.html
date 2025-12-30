@@ -2,14 +2,66 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Login</title>
+    <title>Requirement 3</title>
 </head>
-<body>
-    <h2>Login Screen</h2>
-    <form action="http://localhost:3001/api/login" method="POST">
-        <input type="email" name="email" required placeholder="Email">
-        <input type="password" name="password" required placeholder="Password">
-        <button type="submit">Sign In</button>
-    </form>
+<body style="font-family: sans-serif; padding: 50px;">
+    <h2>Login</h2>
+    <hr>
+    
+    <input type="email" id="email" placeholder="Email">
+    <input type="password" id="password" placeholder="Password">
+    <button onclick="login()">1. Login & Get Token</button>
+
+    <br><br>
+    
+    <button onclick="getProfile()">2. Access Profile with Header Token</button>
+    
+    <p id="status" style="margin-top: 20px; font-weight: bold;"></p>
+
+    <script>
+        let myToken = "";
+
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                // Port 3001 comes from your .env via the backend
+                const response = await fetch('http://localhost:3001/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    myToken = data.token;
+                    document.getElementById('status').innerText = "Step 1: Token stored.";
+                    document.getElementById('status').style.color = "green";
+                } else {
+                    document.getElementById('status').innerText = "Login Failed";
+                }
+            } catch (err) {
+                document.getElementById('status').innerText = "Error: " + err.message;
+            }
+        }
+
+        async function getProfile() {
+            if (!myToken) return alert("Login first!");
+
+            try {
+                const response = await fetch('http://localhost:3001/api/profile', {
+                    method: 'GET',
+                    headers: { 'Authorization': myToken } // Requirement: Send via Header
+                });
+
+                const result = await response.text();
+                document.getElementById('status').innerText = result;
+                document.getElementById('status').style.color = "blue";
+            } catch (err) {
+                document.getElementById('status').innerText = "Error: " + err.message;
+            }
+        }
+    </script>
 </body>
 </html>
