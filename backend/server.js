@@ -3,7 +3,7 @@ const express = require('express');
 const mysql = require('mysql2/promise');
 
 const app = express();
-app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 const dbConfig = {
   host: process.env.DB_HOST,
@@ -13,26 +13,28 @@ const dbConfig = {
   database: process.env.DB_NAME
 };
 
-app.get('/api/health', async (req, res) => {
+app.post('/api/login', async (req, res) => {
+  const { email, password } = req.body;
+
   try {
     const connection = await mysql.createConnection(dbConfig);
-    const [rows] = await connection.execute('SELECT 1 + 1 AS result');
+    const [rows] = await connection.execute(
+      'SELECT * FROM users WHERE email = ? AND password_hash = ?', 
+      [email, password]
+    );
     await connection.end();
-    res.json({ status: "Success", message: "Connected to TiDB" });
+
+    if (rows.length > 0) {
+      res.send(`SUCCESS: LOGGED IN. Welcome ${email}`);
+    } else {
+      res.status(401).send("FAILED: UNAUTHORIZED");
+    }
   } catch (err) {
-    console.error("DB Error:", err.message);
-    res.status(500).json({ status: "Error", message: err.message });
+    res.status(500).send("DATABASE ERROR: " + err.message);
   }
 });
 
-const PORT = process.env.PORT || 3000;
-
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-    console.log(`Server running on port: ${PORT}`);
-});
-
-process.stdin.resume();
-
-process.on('SIGINT', () => {
-  process.exit();
+    console.log(`Server on http://localhost:${PORT}`);
 });

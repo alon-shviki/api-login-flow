@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Database Connection Test</title>
+    <title>Login</title>
 </head>
 <body>
-    <h1>System Connection Test</h1>
-    <p>Click the button below to verify that the Website can talk to the Database.</p>
-    
-    <form action="http://localhost:3000/api/health" method="GET">
-        <button type="submit">Check Connection</button>
+    <h2>Login Screen</h2>
+    <form action="http://localhost:3001/api/login" method="POST">
+        <input type="email" name="email" required placeholder="Email">
+        <input type="password" name="password" required placeholder="Password">
+        <button type="submit">Sign In</button>
     </form>
 </body>
 </html>
