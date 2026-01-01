@@ -7,23 +7,41 @@ const kafka = new Kafka({
 
 const consumer = kafka.consumer({ groupId: 'login-group' });
 
-const run = async () => {
-  await consumer.connect();
-  await consumer.subscribe({ topic: 'user-logins', fromBeginning: true });
+// CHANGED: Added full retry logic (same pattern as cdc-worker)
 
-  console.log(">>> Kafka Worker Listening for Login Events...");
+const start = async () => {
+  try {
+    console.log(">>> Connecting to Kafka...");
+    await consumer.connect();
 
-  await consumer.run({
-    eachMessage: async ({ message }) => {
-      const event = JSON.parse(message.value.toString());
-      console.log("====================================");
-      console.log("[KAFKA EVENT RECEIVED]");
-      console.log(`User: ${event.userId}`);
-      console.log(`Action: ${event.action}`);
-      console.log(`Time: ${event.timestamp}`);
-      console.log("====================================");
-    },
-  });
+    console.log(">>> Subscribing to 'user-logins'...");
+    await consumer.subscribe({ topic: 'user-logins', fromBeginning: true });
+
+    console.log(">>> Kafka Worker Listening for Login Events...");
+
+    await consumer.run({
+      eachMessage: async ({ message }) => {
+        const event = JSON.parse(message.value.toString());
+        console.log("====================================");
+        console.log("[KAFKA EVENT RECEIVED]");
+        console.log(`User: ${event.userId || 'unknown'}`);
+        console.log(`Action: ${event.action}`);
+        if (event.attemptedEmail) {
+          console.log(`Attempted Email: ${event.attemptedEmail}`);
+        }
+        console.log(`Time: ${event.timestamp}`);
+        console.log(`IP: ${event.ipAddress || 'unknown'}`);
+        console.log("====================================");
+      },
+    });
+  } catch (err) {
+    console.error("Login Worker error:", err.message);
+    try {
+      await consumer.disconnect();
+    } catch (e) {}
+    console.log(">>> Restarting in 5 seconds...");
+    setTimeout(start, 5000);
+  }
 };
 
-run().catch(console.error);
+start();

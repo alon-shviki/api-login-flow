@@ -49,7 +49,7 @@ services:
       retries: 20
       start_period: 60s
 
-    # --- Kafka Messaging ---
+  # --- Kafka Messaging ---
   kafka:
     image: apache/kafka:latest
     container_name: kafka
@@ -83,7 +83,7 @@ services:
       - pd
       - tidb
 
-  # --- CDC Initializer: Automatically creates the changefeed - FIXED: use /cdc cli ---
+  # --- CDC Initializer: Automatically creates the changefeed 
   cdc-init:
     image: pingcap/ticdc:v7.5.1
     networks: [api-network]
@@ -134,9 +134,17 @@ services:
     build: ./backend
     container_name: cdc-worker
     command: node cdc-worker.js
+    # CHANGED: Added proper startup ordering to avoid race conditions
+    # - Wait for TiDB to be healthy
+    # - Wait for Kafka to be started
+    # - Wait for cdc-init to finish creating the changefeed
     depends_on:
-      - kafka
-      - cdc-init
+      tidb:
+        condition: service_healthy  # Wait for TiDB to be fully ready
+      kafka:
+        condition: service_started    # Kafka started
+      cdc-init:
+        condition: service_completed_successfully  # Wait for changefeed creation
     networks: [api-network]
 
   # --- Frontend UI ---
